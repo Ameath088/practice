@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jiayou-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: hypertension_risk
+      MYSQL_USER: jiayou
+      MYSQL_PASSWORD: jiayou123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:4.4-community
+    container_name: jiayou-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/jiayou123
+      NEO4J_dbms_memory_heap_initial__size: 256m
+      NEO4J_dbms_memory_heap_max__size: 512m
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./database/neo4j_init.cypher:/docker-entrypoint-initdb.d/init.cypher:ro
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: jiayou-influxdb
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: jiayou
+      DOCKER_INFLUXDB_INIT_PASSWORD: jiayou123
+      DOCKER_INFLUXDB_INIT_ORG: jiayou
+      DOCKER_INFLUXDB_INIT_BUCKET: bp_data
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: jiayou-token-secret
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+
+  redis:
+    image: redis:6-alpine
+    container_name: jiayou-redis
+    restart: unless-stopped
+    command: redis-server --requirepass jiayou123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: jiayou-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  neo4j_data:
+  neo4j_logs:
+  influxdb_data:
+  redis_data:
